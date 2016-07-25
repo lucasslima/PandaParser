@@ -1,7 +1,7 @@
 package main;
 
 import java_cup.runtime.ComplexSymbolFactory.ComplexSymbol;
-import parse.Lexer;
+import parse.*;
 import parse.Terminals;
 import parse.Tokens;
 
