@@ -1,4 +1,12 @@
-/* -*-Mode: java-*- */
+/* -*-Mode: java-*-
+*
+* Analisador léxico da linguagem Panda para o primeiro trabalho prático
+* da disciplina de Contrução de compiladores.
+*
+* Alunos: Lucas Sousa Lima
+*         Carlos Henrique Prieto Bruckner
+*
+* */
 
 package parse;
 
@@ -76,7 +84,7 @@ FloatLiteral  = ({FLit1}|{FLit2}|{FLit3}) {Exponent}? [fF]
 DoubleLiteral = ({FLit1}|{FLit2}|{FLit3}) {Exponent}?
 
 /* string and character literals */
-StringCharacter = [^\n\r\"\\]|"\\\""
+StringCharacter = [^\n\r\"\\]
 SingleCharacter = [^\r\n\'\\]
 
 FLit1    = [0-9]+ \. [0-9]*
@@ -113,6 +121,7 @@ type                  { return tok(TYPE); }
 while                 { return tok(WHILE); }
 do					  { return tok(DO); }
 break				  { return tok(BREAK); }
+nil                   { return tok(NIL); }
 
 
 :                     { return tok(COLON); }
@@ -148,10 +157,36 @@ break				  { return tok(BREAK); }
 [+|-]?{DoubleLiteral}   { return tok(LITREAL, new Double(yytext())); }
 true | false            { return tok(LITBOOL, new Boolean(yytext())); }
 
-\"                    { yybegin(STR); builder.setLength(0); }
+\"                    { yybegin(STR); builder.setLength(0); strLeft = locLeft(); }
 //\"(\\.|[^\\\"])*\"    { return tok(LITSTRING, yytext().substring(1,yylength()-1) ); }
-\'                    { yybegin(CHARLITERAL);}
-\.                    { return tok(DOT); }
+//\'                    { yybegin(CHARLITERAL);}
+
+\'{SingleCharacter}\'   { return tok(LITCHAR, yytext().charAt(1)); }
+
+  /* escape sequences */
+\'"\\b"\'                         { return tok(LITCHAR, '\b');}
+\'"\\t"\'                         { return tok(LITCHAR, '\t');}
+\'"\\n"\'                         { return tok(LITCHAR, '\n');}
+\'"\\f"\'                         { return tok(LITCHAR, '\f');}
+\'"\\r"\'                         { return tok(LITCHAR, '\r');}
+\'"\\\""\'                        { return tok(LITCHAR, '\"');}
+\'"\\'"\'                         { return tok(LITCHAR, '\'');}
+\'"\\\\"\'                        { return tok(LITCHAR, '\\');}
+\'"\\^@"\'                        { return tok(LITCHAR, (char) 0);}
+\'"\\^I'"                         { return tok(LITCHAR, (char) 9);}
+\'"\\^['"                         { return tok(LITCHAR, (char) 27);}
+\'"\\^\\'"                        { return tok(LITCHAR, (char) 28);}
+\'"\\^]'"                         { return tok(LITCHAR, (char) 29);}
+\'"\\^^'"                         { return tok(LITCHAR, (char) 30);}
+\'"\\^_'"                         { return tok(LITCHAR, (char) 31);}
+\'"\\^?'"                         { return tok(LITCHAR, (char) 127);}
+\'\\[0-3]?{OctDigit}?{OctDigit}\' { char val = (char) Integer.parseInt(yytext().substring(2,yylength()-1)); return tok(LITCHAR, new Character(val) );}
+\'\\[\^].\'                      {  error("invalid control character in char literal");}
+\'\\.\'                          {  error("invalid escape sequence in char literal");}
+\'.+\'                           {  error("invalid char literal");}
+\'                               {  error("unclosed char literal"); }
+\.                               { return tok(DOT); }
+
 "#" .*                { /* skip */ }
 "{#"                  { commentLevel++; yybegin(COMMENT);}
 [a-zA-Z][a-zA-Z0-9_]*   { return tok(ID, symbol.Symbol.symbol(yytext())); }
@@ -176,8 +211,8 @@ true | false            { return tok(LITBOOL, new Boolean(yytext())); }
 <STR>{
 
   /* acrescente as regras léxicas para tratar literais strings */
-  \"                             { yybegin(YYINITIAL); return tok(LITSTRING, builder.toString()); }
-  {StringCharacter}+            { builder.append( yytext() ); }
+  \"                             { yybegin(YYINITIAL); return tok(LITSTRING, builder.toString(),strLeft,locRight()); }
+  {StringCharacter}+            { builder.append( yytext()); }
   /* escape sequences */
 
   "\\b"                          { builder.append( '\b' ); }
@@ -188,51 +223,20 @@ true | false            { return tok(LITBOOL, new Boolean(yytext())); }
   "\\\""                         { builder.append( '\"' ); }
   "\\'"                          { builder.append( '\'' ); }
   "\\\\"                         { builder.append( '\\' ); }
-  "\\^@"\"                       { builder.append( 0 ); }
-  "\\^I"                        { builder.append( 11);}
-  "\\^["                        { builder.append( 33);}
-  "\\^\\"                       { builder.append( 34);}
-  "\\^]"                        { builder.append( 35);}
-  "\\^^"                        { builder.append( 36);}
-  "\\^_"                        { builder.append( 37);}
-  "\\^?"                        { builder.append( 177);}
-  \\[0-3]?{OctDigit}?{OctDigit}  { char val = (char) Integer.parseInt(yytext().substring(1),8);
+  "\\^@"                         { builder.append( (char) 0 ); }
+  "\\^I"                         { builder.append( (char) 9);}
+  "\\^["                         { builder.append( (char) 27);}
+  "\\^\\"                        { builder.append( (char) 28);}
+  "\\^]"                         { builder.append( (char) 29);}
+  "\\^^"                         { builder.append( (char) 30);}
+  "\\^_"                         { builder.append( (char) 31);}
+  "\\^?"                         { builder.append( (char) 127);}
+  \\[0-3]?{OctDigit}?{OctDigit}  { char val = (char) Integer.parseInt(yytext().substring(1));
                         				   builder.append( val ); }
   /* error cases */
-  \\.                           { error ("invalid control character in char literal"); }
-  //\\.                         { throw new RuntimeException("Illegal escape sequence \""+yytext()+"\""); }
-  //{LineTerminator}            { throw new RuntimeException("Unterminated string at end of line"); }
+  \\[\^].                        { error ("invalid control character in string literal"); }
+  \\.                            {  error("invalid escape sequence in string literal");}
+  {LineTerminator}               { error("invalid newline in string literal"); }
 
 }
-
-<CHARLITERAL> {
-  {SingleCharacter}\'            { yybegin(YYINITIAL); return tok(LITCHAR, yytext().charAt(0), new Location(yyline+1, yycolumn),
-                                                                                                new Location(yyline+1, yycolumn+1+yylength())); }
-
-  /* escape sequences */
-  "\\b"\'                        { yybegin(YYINITIAL); return tok(LITCHAR, '\b', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\t"\'                        { yybegin(YYINITIAL); return tok(LITCHAR, '\t', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\n"\'                        { yybegin(YYINITIAL); return tok(LITCHAR, '\n', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\f"\'                        { yybegin(YYINITIAL); return tok(LITCHAR, '\f', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\r"\'                        { yybegin(YYINITIAL); return tok(LITCHAR, '\r', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\\""\'                       { yybegin(YYINITIAL); return tok(LITCHAR, '\"', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\'"\'                        { yybegin(YYINITIAL); return tok(LITCHAR, '\'', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\\\"\'                       { yybegin(YYINITIAL); return tok(LITCHAR, '\\', new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength())); }
-  "\\^@"\'                       { yybegin(YYINITIAL); return tok(LITCHAR, (char) 0, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength())); }
-  "\\^I'"                        { yybegin(YYINITIAL); return tok(LITCHAR, (char) 9, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\^['"                        { yybegin(YYINITIAL); return tok(LITCHAR, (char) 27, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\^\\'"                       { yybegin(YYINITIAL); return tok(LITCHAR, (char) 28, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\^]'"                        { yybegin(YYINITIAL); return tok(LITCHAR, (char) 29, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\^^'"                        { yybegin(YYINITIAL); return tok(LITCHAR, (char) 30, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\^_'"                        { yybegin(YYINITIAL); return tok(LITCHAR, (char) 31, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  "\\^?'"                        { yybegin(YYINITIAL); return tok(LITCHAR, (char) 127, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength()));}
-  \\[0-3]?{OctDigit}?{OctDigit}\' { yybegin(YYINITIAL);
-			                              int val = Integer.parseInt(yytext().substring(1,yylength()-1));
-			                            return tok(LITCHAR, (char)val, new Location(yyline+1, yycolumn), new Location(yyline+1, yycolumn+1+yylength())); }
-
-  /* error cases */
-  \\[\^].\'                          {  errormsg.Error.error( new Loc(new Location(unit, yyline+1, yycolumn), new Location(unit, yyline+1, yycolumn+1+yylength())), "lexical error: " + "invalid control character in char literal");}
-  \\.\'                          {  errormsg.Error.error( new Loc(new Location(unit, yyline+1, yycolumn), new Location(unit, yyline+1, yycolumn+1+yylength())), "lexical error: " + "invalid escape sequence in char literal");}
-  .+\'                           {  errormsg.Error.error( new Loc(new Location(unit, yyline+1, yycolumn), new Location(unit, yyline+1, yycolumn+1+yylength())), "lexical error: " + "invalid char literal");}
-  \R                             { errormsg.Error.error( new Loc(new Location(unit, yyline+1, yycolumn), new Location(unit, yyline+1, yycolumn+yylength())), "lexical error: " + "unclosed char literal"); }
-}
+.           { error("invalid character: [" + yytext() + "]"); }
